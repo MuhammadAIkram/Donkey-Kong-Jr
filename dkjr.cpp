@@ -274,6 +274,7 @@ void* FctThreadDKJr(void *)
 	 
 	setGrilleJeu(3, 1, DKJR); 
 	afficherDKJr(11, 9, 1); 
+	effacerCarres(11, 7, 2, 2);
 	etatDKJr = LIBRE_BAS; 
 	positionDKJr = 1;
 	 
@@ -337,6 +338,9 @@ void* FctThreadDKJr(void *)
 
 						 		//faire le sleep
 						 		nanosleep(&requete, &rest);
+
+						 		//reprendre en main le mutex
+						 		pthread_mutex_lock(&mutexGrilleJeu);
 
 						 		//effacer jr en train de sauter
 						 		setGrilleJeu(2, positionDKJr);
@@ -443,6 +447,9 @@ void* FctThreadDKJr(void *)
 						 		//faire le sleep
 						 		nanosleep(&requete, &rest);
 
+						 		//reprendre en main le mutex
+						 		pthread_mutex_lock(&mutexGrilleJeu);
+
 						 		//effacer jr en train de sauter
 						 		setGrilleJeu(0, positionDKJr);
 						 		effacerCarres(6, (positionDKJr * 2) + 7, 2, 2);
@@ -486,121 +493,122 @@ void* FctThreadDKJr(void *)
 
  						case SDLK_LEFT:
 
-						 	if (positionDKJr >= 3)
-						 	{
-						 		setGrilleJeu(1, positionDKJr);
+ 							if(positionDKJr > 3)
+ 							{
+ 								setGrilleJeu(1, positionDKJr);
 						 		effacerCarres(7, (positionDKJr * 2) + 7, 2, 2);
 
 						 		positionDKJr--;
 
-						 		if(positionDKJr > 3)
-						 		{
-						 			setGrilleJeu(1, positionDKJr, DKJR);
-						 			afficherDKJr(7, (positionDKJr * 2) + 7, ((positionDKJr - 1) % 4) + 1);
-						 		}
-						 		else
-						 		{
+						 		setGrilleJeu(1, positionDKJr, DKJR);
+						 		afficherDKJr(7, (positionDKJr * 2) + 7, ((positionDKJr - 1) % 4) + 1);
+ 							}
+ 							else
+ 							{
+ 								setGrilleJeu(1, positionDKJr);
+						 		effacerCarres(7, (positionDKJr * 2) + 7, 2, 2);
+
+ 								setGrilleJeu(0, positionDKJr, DKJR);
+					 			afficherDKJr(7, (positionDKJr * 2) + 7, 9);
+
+					 			requete = { 0, 500000000 };
+
+					 			if(grilleJeu[0][1].type == CLE)
+					 			{
+					 				printf("CLE CAPTURER\n");
+
+					 				//faire le sleep
+				 					nanosleep(&requete, &rest);
+
+				 					//efface jr en train de sauter pour le cle et le cle
+						 			setGrilleJeu(0, positionDKJr);
+						 			effacerCarres(3, 12, 2, 4);
+						 			effacerCarres(5, (2 * 2) + 7, 3, 3);
+						 			afficherCage(4);
+
+						 			//afficher jr avec le cle
 						 			setGrilleJeu(0, positionDKJr, DKJR);
-						 			afficherDKJr(7, (positionDKJr * 2) + 7, 9);
+					 				afficherDKJr(6, (positionDKJr * 2) + 7, 10);
 
-						 			requete = { 0, 500000000 };
+					 				pthread_mutex_lock(&mutexDK);
 
-						 			if(grilleJeu[0][1].type == CLE)
-						 			{
-						 				printf("CLE CAPTURER\n");
+									MAJDK = true;
 
-						 				//faire le sleep
-					 					nanosleep(&requete, &rest);
+									pthread_mutex_unlock(&mutexDK); 
 
-					 					//efface jr en train de sauter pour le cle
-							 			setGrilleJeu(0, positionDKJr);
-							 			effacerCarres(5, (2 * 2) + 7, 3, 3);
-							 			afficherCage(4);
+									pthread_cond_signal(&condDK); //pour envoyer le signal
 
-							 			//afficher jr avec le cle
-							 			setGrilleJeu(0, positionDKJr, DKJR);
-						 				afficherDKJr(6, (positionDKJr * 2) + 7, 10);
+					 				requete = { 0, 200000000 };
 
-						 				pthread_mutex_lock(&mutexDK);
+					 				nanosleep(&requete, &rest);
 
-										MAJDK = true;
+					 				//efface jr avec le cle
+						 			setGrilleJeu(0, positionDKJr);
+						 			effacerCarres(3, (2 * 2) + 7, 3, 2);
+						 			afficherCage(4);
 
-										pthread_mutex_unlock(&mutexDK); 
+						 			//afficher jr heureuse
+						 			setGrilleJeu(1, positionDKJr, DKJR);
+					 				afficherDKJr(7, (positionDKJr * 2) + 7, 11);
 
-										pthread_cond_signal(&condDK); //pour envoyer le signal
+					 				requete = { 0, 500000000 };
 
-						 				requete = { 0, 400000000 };
+					 				nanosleep(&requete, &rest);
+					 		
+					 				setGrilleJeu(1, positionDKJr);
+					 				effacerCarres(6, 10, 2, 3);
 
-						 				nanosleep(&requete, &rest);
+					 				//lui afficher sur le sol
+							 		setGrilleJeu(3, 1, DKJR); 
+									afficherDKJr(11, 9, 1); 
+									etatDKJr = LIBRE_BAS; 
+									positionDKJr = 1;
+					 			}
+					 			else 
+					 			{
+				 					printf("L\n");
 
-						 				//efface jr avec le cle
-							 			setGrilleJeu(0, positionDKJr);
-							 			effacerCarres(3, (2 * 2) + 7, 3, 2);
-							 			afficherCage(4);
+				 					//faire le sleep
+				 					pthread_mutex_unlock(&mutexGrilleJeu);
+					 				nanosleep(&requete, &rest);
+					 				pthread_mutex_lock(&mutexGrilleJeu);
 
-							 			//afficher jr heureuse
-							 			setGrilleJeu(1, positionDKJr, DKJR);
-						 				afficherDKJr(7, (positionDKJr * 2) + 7, 11);
+				 					//efface jr en train de sauter pour le cle
+						 			setGrilleJeu(0, positionDKJr);
+						 			effacerCarres(5, (2 * 2) + 7, 3, 3);
+						 			afficherCage(4);
 
-						 				requete = { 0, 400000000 };
+						 			//afficher jr en train de tomber
+						 			setGrilleJeu(0, positionDKJr, DKJR);
+					 				afficherDKJr(6, (positionDKJr * 2) + 7, 12);
 
-						 				nanosleep(&requete, &rest);
-						 		
-						 				setGrilleJeu(1, positionDKJr);
-						 				effacerCarres(6, 10, 2, 3);
-						 				
+					 				requete = { 0, 200000000 };
 
-						 				//lui afficher sur le sol
-								 		setGrilleJeu(3, 1, DKJR); 
-										afficherDKJr(11, 9, 1); 
-										etatDKJr = LIBRE_BAS; 
-										positionDKJr = 1;
-						 			}
-						 			else 
-						 			{
-					 					printf("L\n");
+					 				pthread_mutex_unlock(&mutexGrilleJeu);
+					 				nanosleep(&requete, &rest);
+					 				pthread_mutex_lock(&mutexGrilleJeu);
 
-					 					//faire le sleep
-					 					nanosleep(&requete, &rest);
+					 				//efface jr entreint de tomber
+						 			setGrilleJeu(0, positionDKJr);
+						 			effacerCarres(6, (2 * 2) + 7, 2, 2);
 
-					 					//efface jr en train de sauter pour le cle
-							 			setGrilleJeu(0, positionDKJr);
-							 			effacerCarres(5, (2 * 2) + 7, 3, 3);
-							 			afficherCage(4);
+						 			//afficher jr dans les buissons
+						 			setGrilleJeu(3, 1, DKJR);
+					 				afficherDKJr(11, 8, 13);
 
-							 			//afficher jr en train de tomber
-							 			setGrilleJeu(0, positionDKJr, DKJR);
-						 				afficherDKJr(6, (positionDKJr * 2) + 7, 12);
+					 				requete = { 0, 200000000 };
 
-						 				requete = { 0, 200000000 };
+					 				pthread_mutex_unlock(&mutexGrilleJeu);
+					 				nanosleep(&requete, &rest);
+					 				pthread_mutex_lock(&mutexGrilleJeu);
 
-						 				pthread_mutex_unlock(&mutexGrilleJeu);
-						 				nanosleep(&requete, &rest);
-						 				pthread_mutex_lock(&mutexGrilleJeu);
+						 			setGrilleJeu(3, positionDKJr);
+						 			
+						 			//pour signaler le fin
+						 			on = false;
+								}
+ 							}
 
-						 				//efface jr entreint de tomber
-							 			setGrilleJeu(0, positionDKJr);
-							 			effacerCarres(6, (2 * 2) + 7, 2, 2);
-
-							 			//afficher jr dans les buissons
-							 			setGrilleJeu(3, 1, DKJR);
-						 				afficherDKJr(11, 8, 13);
-
-						 				requete = { 0, 200000000 };
-
-						 				pthread_mutex_unlock(&mutexGrilleJeu);
-						 				nanosleep(&requete, &rest);
-						 				pthread_mutex_lock(&mutexGrilleJeu);
-
-						 				//efface jr dans les buissons
-							 			setGrilleJeu(3, positionDKJr);
-							 			effacerCarres(11, 7, 2, 2);
-
-							 			//pour signaler le fin
-							 			on = false;
-									}
-						 		}
-						 	}
 					 	break;
 
 						case SDLK_RIGHT:
@@ -693,14 +701,17 @@ void* FctThreadDK(void *)
 					case 4:
 							printf("4\n");
 							//effacer le dernier cage
+
+							requete = { 0, 200000000 };
+							nanosleep(&requete, &rest);
+
 							effacerCarres(4,9,2,3);
 
 							afficherRireDK();
 							requete = { 0, 700000000 };
 
 							pthread_mutex_lock(&mutexGrilleJeu);
-							effacerCarres(4,9,2,3);
-						 	nanosleep(&requete, &rest);
+							nanosleep(&requete, &rest);
 						 	pthread_mutex_unlock(&mutexGrilleJeu);
 
 						 	//effacer le rire
