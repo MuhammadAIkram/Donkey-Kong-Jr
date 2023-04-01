@@ -120,6 +120,10 @@ int main(int argc, char* argv[])
 	pthread_mutex_init(&mutexDK, NULL);
 	pthread_cond_init(&condDK, NULL);
 
+	//initialiser mutex score et cond score
+	pthread_mutex_init(&mutexScore, NULL);
+	pthread_cond_init(&condScore, NULL);
+
 	//commencer le thread cle
 	pthread_create(&threadCle, NULL, (void *(*) (void *))FctThreadCle, NULL);
 
@@ -128,6 +132,9 @@ int main(int argc, char* argv[])
 
 	//commencer le thread donkey kong
 	pthread_create(&threadDK, NULL, (void *(*) (void *))FctThreadDK, NULL);
+
+	//commencer le thread score
+	pthread_create(&threadScore, NULL, (void *(*) (void *))FctThreadScore, NULL);
 
 	int vie = 1;
 
@@ -530,6 +537,17 @@ void* FctThreadDKJr(void *)
 						 			setGrilleJeu(0, positionDKJr, DKJR);
 					 				afficherDKJr(6, (positionDKJr * 2) + 7, 10);
 
+					 				//pour augmenter le score
+					 				pthread_mutex_lock(&mutexScore);
+
+					 				MAJScore = true;
+					 				score += 10;
+
+					 				pthread_mutex_unlock(&mutexScore);
+
+					 				//signaler que le score vient de changer
+					 				pthread_cond_signal(&condScore);
+
 					 				pthread_mutex_lock(&mutexDK);
 
 									MAJDK = true;
@@ -710,6 +728,17 @@ void* FctThreadDK(void *)
 							afficherRireDK();
 							requete = { 0, 700000000 };
 
+							//pour augmenter le score
+			 				pthread_mutex_lock(&mutexScore);
+
+			 				MAJScore = true;
+			 				score += 10;
+
+			 				pthread_mutex_unlock(&mutexScore);
+
+			 				//signaler que le score vient de changer
+			 				pthread_cond_signal(&condScore);
+
 							pthread_mutex_lock(&mutexGrilleJeu);
 							nanosleep(&requete, &rest);
 						 	pthread_mutex_unlock(&mutexGrilleJeu);
@@ -724,6 +753,31 @@ void* FctThreadDK(void *)
 
 				MAJDK = false;
 			}
+		}
+	}
+
+	pthread_exit(NULL);
+}
+
+// -------------------------------------
+
+void* FctThreadScore(void *)
+{
+	printf("Thread Score Cree: %d.%u\n", getpid(), pthread_self());
+
+	afficherScore(0);
+
+	while(1)
+	{
+		pthread_cond_wait(&condScore, &mutexScore);
+
+		if(MAJScore == true)
+		{
+			printf("update score\n");
+
+			afficherScore(score);
+
+			MAJScore = false;
 		}
 	}
 
