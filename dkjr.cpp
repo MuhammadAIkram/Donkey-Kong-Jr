@@ -102,10 +102,23 @@ int main(int argc, char* argv[])
 		exit(1);
 	}
 
-	//masquage du signal sigquit
+	//armement du signal sigalarm
+	struct sigaction B;
+  B.sa_handler = HandlerSIGALRM;
+  sigemptyset(&B.sa_mask);
+  B.sa_flags = 0;
+
+  if (sigaction(SIGALRM,&B,NULL) == -1)
+  {
+    perror("Erreur de sigaction");
+    exit(1);
+  }
+
+	//masquage des signaux
 	sigset_t mask;
 	sigemptyset(&mask);
 	sigaddset(&mask,SIGQUIT);
+	sigaddset(&mask,SIGALRM);
 
 	// Mise en place du nouveau masque de signal
 	sigprocmask(SIG_SETMASK,&mask,NULL);
@@ -135,6 +148,9 @@ int main(int argc, char* argv[])
 
 	//commencer le thread score
 	pthread_create(&threadScore, NULL, (void *(*) (void *))FctThreadScore, NULL);
+
+	//commencer le thread ennemis
+	pthread_create(&threadEnnemis, NULL, (void *(*) (void *))FctThreadEnnemis, NULL);
 
 	int vie = 1;
 
@@ -208,15 +224,6 @@ void* FctThreadCle(void *)
 		afficherCle(i);
 		pthread_mutex_unlock(&mutexGrilleJeu);
 
-		// if(i == 1) 
-		// {
-		// 	setGrilleJeu(0,1,CLE,threadCle); //grilleJeu[0][1].type = CLE;
-		// }
-		// else
-		// {
-		// 	setGrilleJeu(0,1,VIDE,threadCle); //grilleJeu[0][1].type = VIDE;
-		// }
-
 		if(i == 1) grilleJeu[0][1].type = CLE;
 		else grilleJeu[0][1].type = VIDE;
 
@@ -263,14 +270,14 @@ void* FctThreadEvenements(void *)
 
 void* FctThreadDKJr(void *)
 {
-	printf("DKJR = %d.%u\n", getpid(), pthread_self());
+	printf("Thread DKJR Cree: %d.%u\n", getpid(), pthread_self());
 
-	sigset_t mask;
-	sigemptyset(&mask);
-	sigdelset(&mask,SIGQUIT); //pour permettre le thread dkjr de recoivoir le signal SIGQUIT
+	sigset_t maskDKJR;
+	sigfillset(&maskDKJR);
+	sigdelset(&maskDKJR,SIGQUIT); //pour permettre le thread dkjr de recoivoir le signal SIGQUIT
 
 	// Mise en place du nouveau masque de signal
-	sigprocmask(SIG_SETMASK,&mask,NULL);
+	sigprocmask(SIG_SETMASK,&maskDKJR,NULL);
 
 	/*---------------------------------------*/
 
@@ -784,6 +791,55 @@ void* FctThreadScore(void *)
 	pthread_exit(NULL);
 }
 
+// -------------------------------------
+
+void* FctThreadEnnemis(void *)
+{
+	printf("Thread Ennemis Cree: %d.%u\n", getpid(), pthread_self());
+
+	sigset_t maskEnnemis;
+	sigfillset(&maskEnnemis);
+	sigdelset(&maskEnnemis,SIGALRM); //pour permettre le thread ennemis de recevoir le signal SIGALARM
+
+	// Mise en place du nouveau masque de signal
+	sigprocmask(SIG_SETMASK,&maskEnnemis,NULL);
+
+	/*---------------------------------------*/
+
+	alarm(15);
+	srand((unsigned) time(NULL));
+
+	int timeRespawnSec = delaiEnnemis/1000;
+	int timeRespawnNsec = (delaiEnnemis%1000)*1000000;
+	struct timespec rest, requete = { timeRespawnSec, timeRespawnNsec };
+	int random;
+
+	while(1)
+	{
+		nanosleep(&requete, &rest);
+
+		printf("time respawn = %d.%d\n", timeRespawnSec, timeRespawnNsec);
+
+		random = 1 + (rand() % 2);
+
+		if(random == 1)
+		{
+			printf("CORBEAU\n");
+		}
+		else
+		{
+			printf("CROCO\n");
+		}
+
+		timeRespawnSec = delaiEnnemis/1000;
+		timeRespawnNsec = (delaiEnnemis%1000)*1000000;
+
+		requete = { timeRespawnSec, timeRespawnNsec };
+	}
+
+	pthread_exit(NULL);
+}
+
 
 // -------------------------------------
 //LES SIGNAUX
@@ -791,4 +847,18 @@ void* FctThreadScore(void *)
 void HandlerSIGQUIT(int)
 {
 	//printf("positionDKJr = %d; etatDKJr = %d\n", positionDKJr, etatDKJr);
+	//printf("Recu par: %d.%u\n", getpid(), pthread_self());
+}
+
+// -------------------------------------
+
+void HandlerSIGALRM(int)
+{
+	printf("SIGALRM RECU PAR %d.%u!\n", getpid(), pthread_self());
+
+	delaiEnnemis = delaiEnnemis - 250;
+
+	printf("Delai Ennemis = %d\n", delaiEnnemis);
+
+	if(delaiEnnemis > 2500) alarm(15);
 }
