@@ -114,11 +114,43 @@ int main(int argc, char* argv[])
     exit(1);
   }
 
+  //armement du signal SIGUSR1
+	struct sigaction C;
+  C.sa_handler = HandlerSIGUSR1;
+  sigemptyset(&C.sa_mask);
+  C.sa_flags = 0;
+
+  if (sigaction(SIGUSR1,&C,NULL) == -1)
+  {
+    perror("Erreur de sigaction");
+    exit(1);
+  }
+
+  //armenment du signal sigint
+	struct sigaction D;
+	D.sa_handler = HandlerSIGINT;
+	sigemptyset(&D.sa_mask);
+	D.sa_flags = 0;
+
+	if (sigaction(SIGINT,&D,NULL) == -1)
+	{
+		perror("Erreur de sigaction");
+		exit(1);
+	}
+
 	//masquage des signaux
 	sigset_t mask;
 	sigemptyset(&mask);
 	sigaddset(&mask,SIGQUIT);
 	sigaddset(&mask,SIGALRM);
+	sigaddset(&mask,SIGUSR1);
+	sigaddset(&mask,SIGINT);
+
+	//initiliser cond DK
+	pthread_cond_init(&condDK, NULL);
+
+	//initialiser cond score
+	pthread_cond_init(&condScore, NULL);
 
 	// Mise en place du nouveau masque de signal
 	sigprocmask(SIG_SETMASK,&mask,NULL);
@@ -129,13 +161,14 @@ int main(int argc, char* argv[])
 	//initialiser mutex GrilleJeu
 	pthread_mutex_init(&mutexGrilleJeu, NULL);
 
-	//initialiser mutex DK et cond DK
+	//initialiser mutex DK
 	pthread_mutex_init(&mutexDK, NULL);
-	pthread_cond_init(&condDK, NULL);
 
 	//initialiser mutex score et cond score
 	pthread_mutex_init(&mutexScore, NULL);
-	pthread_cond_init(&condScore, NULL);
+
+	//creer notre cle keyspec qui va etre utiliser pour fournir la position du courbeau et croco
+	pthread_key_create(&keySpec, DestructeurVS);
 
 	//commencer le thread cle
 	pthread_create(&threadCle, NULL, (void *(*) (void *))FctThreadCle, NULL);
@@ -166,7 +199,7 @@ int main(int argc, char* argv[])
 		vie++;
 	}
 
-	pause();
+	pthread_join(threadEvenements, NULL);
 }
 
 // -------------------------------------
@@ -275,6 +308,7 @@ void* FctThreadDKJr(void *)
 	sigset_t maskDKJR;
 	sigfillset(&maskDKJR);
 	sigdelset(&maskDKJR,SIGQUIT); //pour permettre le thread dkjr de recoivoir le signal SIGQUIT
+	sigdelset(&maskDKJR,SIGINT); //pour permettre le thread dkjr de recoivoir le signal SIGINT
 
 	// Mise en place du nouveau masque de signal
 	sigprocmask(SIG_SETMASK,&maskDKJR,NULL);
@@ -336,61 +370,82 @@ void* FctThreadDKJr(void *)
 					case SDLK_UP:
 							if (positionDKJr == 2 || positionDKJr == 3 || positionDKJr == 4 || positionDKJr == 6)
 						 	{
-						 		//on efface jr sur le sol
-						 		setGrilleJeu(3, positionDKJr);
-						 		effacerCarres(11, (positionDKJr * 2) + 7, 2, 2);
+						 		if(grilleJeu[2][positionDKJr].type == CORBEAU)
+						 		{
+						 			printf("REKT BY COURBEAU LLLLLL\n");
 
-						 		//on va lui afficher en train de sauter avec l'image 8
-						 		setGrilleJeu(2, positionDKJr, DKJR);
-						 		afficherDKJr(10, (positionDKJr * 2) + 7, 8);
+						 			kill(getpid(), SIGUSR1);
 
-						 		//mettre un timeur de 1.4 secondes
-						 		requete = { 1, 400000000 };
+									on = false;
+						 		}
+						 		else
+						 		{
+						 			//on efface jr sur le sol
+							 		setGrilleJeu(3, positionDKJr);
+							 		effacerCarres(11, (positionDKJr * 2) + 7, 2, 2);
 
-						 		//liberer le mutex grillejeu
-						 		pthread_mutex_unlock(&mutexGrilleJeu);
+							 		//on va lui afficher en train de sauter avec l'image 8
+							 		setGrilleJeu(2, positionDKJr, DKJR);
+							 		afficherDKJr(10, (positionDKJr * 2) + 7, 8);
 
-						 		//faire le sleep
-						 		nanosleep(&requete, &rest);
+							 		//mettre un timeur de 1.4 secondes
+							 		requete = { 1, 400000000 };
 
-						 		//reprendre en main le mutex
-						 		pthread_mutex_lock(&mutexGrilleJeu);
+							 		//liberer le mutex grillejeu
+							 		pthread_mutex_unlock(&mutexGrilleJeu);
 
-						 		//effacer jr en train de sauter
-						 		setGrilleJeu(2, positionDKJr);
-						 		effacerCarres(10, (positionDKJr * 2) + 7, 2, 2);
+							 		//faire le sleep
+							 		nanosleep(&requete, &rest);
 
-						 		//lui afficher sur le sol
-						 		setGrilleJeu(3, positionDKJr, DKJR);
-						 		afficherDKJr(11, (positionDKJr * 2) + 7, ((positionDKJr - 1) % 4) + 1);
+							 		//reprendre en main le mutex
+							 		pthread_mutex_lock(&mutexGrilleJeu);
 
+							 		//effacer jr en train de sauter
+							 		setGrilleJeu(2, positionDKJr);
+							 		effacerCarres(10, (positionDKJr * 2) + 7, 2, 2);
+
+							 		//lui afficher sur le sol
+							 		setGrilleJeu(3, positionDKJr, DKJR);
+							 		afficherDKJr(11, (positionDKJr * 2) + 7, ((positionDKJr - 1) % 4) + 1);
+						 		}
 						 	}
 						 	else
 						 	{
-						 		if(positionDKJr == 1 || positionDKJr == 5)
-							 	{
-							 		//on efface jr sur le sol
-							 		setGrilleJeu(3, positionDKJr);
-							 		effacerCarres(11, (positionDKJr * 2) + 7, 2, 2);
+						 		if(grilleJeu[2][positionDKJr].type == CORBEAU)
+						 		{
+						 			printf("REKT BY COURBEAU LLLLLL\n");
 
-							 		//on va lui afficher avec image 7
-							 		setGrilleJeu(2, positionDKJr, DKJR);
-							 		afficherDKJr(10, (positionDKJr * 2) + 7, 7);
+						 			kill(getpid(), SIGUSR1);
 
-							 		etatDKJr = LIANE_BAS;
-							 	}
-							 	else
-							 	{
-							 		//on efface jr sur le sol
-							 		setGrilleJeu(3, positionDKJr);
-							 		effacerCarres(11, (positionDKJr * 2) + 7, 2, 2);
+									on = false;
+						 		}
+						 		else
+						 		{
+						 			if(positionDKJr == 1 || positionDKJr == 5)
+								 	{
+								 		//on efface jr sur le sol
+								 		setGrilleJeu(3, positionDKJr);
+								 		effacerCarres(11, (positionDKJr * 2) + 7, 2, 2);
 
-							 		//on va lui afficher avec l'image 5
-							 		setGrilleJeu(2, positionDKJr, DKJR);
-							 		afficherDKJr(10, (positionDKJr * 2) + 7, 5);
+								 		//on va lui afficher avec image 7
+								 		setGrilleJeu(2, positionDKJr, DKJR);
+								 		afficherDKJr(10, (positionDKJr * 2) + 7, 7);
 
-							 		etatDKJr = DOUBLE_LIANE_BAS;
-							 	}
+								 		etatDKJr = LIANE_BAS;
+								 	}
+								 	else
+								 	{
+								 		//on efface jr sur le sol
+								 		setGrilleJeu(3, positionDKJr);
+								 		effacerCarres(11, (positionDKJr * 2) + 7, 2, 2);
+
+								 		//on va lui afficher avec l'image 5
+								 		setGrilleJeu(2, positionDKJr, DKJR);
+								 		afficherDKJr(10, (positionDKJr * 2) + 7, 5);
+
+								 		etatDKJr = DOUBLE_LIANE_BAS;
+								 	}
+						 		}
 						 	}
 					 	break;
 				}
@@ -678,6 +733,8 @@ void* FctThreadDKJr(void *)
 
  		}
 
+ 		//afficherGrilleJeu();
+
  		pthread_mutex_unlock(&mutexGrilleJeu);
  		pthread_mutex_unlock(&mutexEvenement);
 	}
@@ -813,6 +870,7 @@ void* FctThreadEnnemis(void *)
 	int timeRespawnNsec = (delaiEnnemis%1000)*1000000;
 	struct timespec rest, requete = { timeRespawnSec, timeRespawnNsec };
 	int random;
+	pthread_t threadCourbeau;
 
 	while(1)
 	{
@@ -824,7 +882,10 @@ void* FctThreadEnnemis(void *)
 
 		if(random == 1)
 		{
-			printf("CORBEAU\n");
+			//printf("CORBEAU\n");
+
+			//commencer le thread courbeau
+			pthread_create(&threadCourbeau, NULL, (void *(*) (void *))FctThreadCorbeau, NULL);
 		}
 		else
 		{
@@ -840,6 +901,83 @@ void* FctThreadEnnemis(void *)
 	pthread_exit(NULL);
 }
 
+// -------------------------------------
+
+void* FctThreadCorbeau(void *)
+{
+	printf("Thread Courbeau Cree: %d.%u\n", getpid(), pthread_self());
+
+	sigset_t maskCourbeau;
+	sigfillset(&maskCourbeau);
+	sigdelset(&maskCourbeau,SIGUSR1); //pour permettre le thread courbeau de recevoir le signal SIGUSR1
+
+	// Mise en place du nouveau masque de signal
+	sigprocmask(SIG_SETMASK,&maskCourbeau,NULL);
+
+	/*---------------------------------------*/
+
+	int positionCourbeau = 0;
+	struct timespec rest, requete = { 0, 700000000 };
+
+	//creation du memoire pour notre cle
+	int *PosCourb = (int *)malloc(sizeof(int));
+
+	setGrilleJeu(2, positionCourbeau, CORBEAU);
+ 	afficherCorbeau(8, 2);
+
+ 	*PosCourb = positionCourbeau;
+ 	pthread_setspecific(keySpec, PosCourb);
+
+ 	nanosleep(&requete, &rest);
+
+	while(positionCourbeau < 7)
+	{
+		if(grilleJeu[2][positionCourbeau + 1].type == DKJR)
+		{
+			printf("MEGA L BY COURBEAU\n");
+
+			kill(getpid(), SIGINT); //envoyer le signal
+
+			//pour faire sortir du boucle
+			break;
+		}
+		else
+		{
+			pthread_mutex_lock(&mutexGrilleJeu);
+
+			setGrilleJeu(2, positionCourbeau);
+	 		effacerCarres(9, (positionCourbeau * 2) + 8, 2, 1);
+
+	 		positionCourbeau++;
+
+	 		*PosCourb = positionCourbeau;
+	 		pthread_setspecific(keySpec, PosCourb);
+
+	 		setGrilleJeu(2, positionCourbeau, CORBEAU);
+	 		afficherCorbeau((positionCourbeau * 2) + 8, ((positionCourbeau - 1) % 2) + 1);
+
+	 		//afficherGrilleJeu();
+
+	 		pthread_mutex_unlock(&mutexGrilleJeu);
+
+	 		nanosleep(&requete, &rest);
+		}
+	}
+
+	setGrilleJeu(2, positionCourbeau);
+ 	effacerCarres(9, (positionCourbeau * 2) + 8, 2, 2);
+
+	pthread_exit(NULL);
+}
+
+// -------------------------------------
+// DESTRUCTEUR
+
+void DestructeurVS(void *p)
+{
+	printf("LIBERATION DU MEMOIRE POUR LE THREAD %d.%u\n", getpid(), pthread_self());
+	free(p);
+}
 
 // -------------------------------------
 //LES SIGNAUX
@@ -861,4 +999,37 @@ void HandlerSIGALRM(int)
 	printf("Delai Ennemis = %d\n", delaiEnnemis);
 
 	if(delaiEnnemis > 2500) alarm(15);
+}
+
+// -------------------------------------
+
+void HandlerSIGUSR1(int)
+{
+	printf("SIGUSR1 RECU PAR %d.%u!\n", getpid(), pthread_self());
+
+	pthread_mutex_lock(&mutexGrilleJeu);
+
+	int *posC = (int*)pthread_getspecific(keySpec);
+
+	setGrilleJeu(2, *posC);
+	effacerCarres(9, (*posC * 2) + 7, 4, 2);
+
+	pthread_mutex_unlock(&mutexGrilleJeu);
+
+	pthread_exit(NULL);
+}
+
+// -------------------------------------
+
+void HandlerSIGINT(int)
+{
+	printf("SIGINT RECU PAR %d.%u!\n", getpid(), pthread_self());
+
+	setGrilleJeu(2, positionDKJr);
+	effacerCarres(10, (positionDKJr * 2) + 7, 2, 2);
+
+	pthread_mutex_unlock(&mutexGrilleJeu);
+ 	pthread_mutex_unlock(&mutexEvenement);
+
+ 	pthread_exit(NULL);
 }
