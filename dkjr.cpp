@@ -58,6 +58,7 @@ pthread_mutex_t mutexGrilleJeu;
 pthread_mutex_t mutexDK;
 pthread_mutex_t mutexEvenement;
 pthread_mutex_t mutexScore;
+pthread_mutex_t mutexDelai;
 
 pthread_key_t keySpec;
 
@@ -68,6 +69,10 @@ int  delaiEnnemis = 4000;
 int  positionDKJr = 1;
 int  evenement = AUCUN_EVENEMENT;
 int etatDKJr;
+
+//variable globale personnelle
+int VeriScore = 0;
+int vie = 1;
 
 typedef struct
 {
@@ -203,8 +208,11 @@ int main(int argc, char* argv[])
 	//initialiser mutex DK
 	pthread_mutex_init(&mutexDK, NULL);
 
-	//initialiser mutex score et cond score
+	//initialiser mutex score
 	pthread_mutex_init(&mutexScore, NULL);
+
+	//initialiser mutex delai
+	pthread_mutex_init(&mutexDelai, NULL);
 
 	//creer notre cle keyspec qui va etre utiliser pour fournir la position du courbeau et croco
 	pthread_key_create(&keySpec, DestructeurVS);
@@ -223,8 +231,6 @@ int main(int argc, char* argv[])
 
 	//commencer le thread ennemis
 	pthread_create(&threadEnnemis, NULL, (void *(*) (void *))FctThreadEnnemis, NULL);
-
-	int vie = 1;
 
 	while(vie <= 3)
 	{
@@ -478,6 +484,20 @@ void* FctThreadDKJr(void *)
 								 		setGrilleJeu(3, positionDKJr, DKJR);
 								 		afficherDKJr(11, (positionDKJr * 2) + 7, ((positionDKJr - 1) % 4) + 1);
 
+								 		if(grilleJeu[3][positionDKJr-1].type == CROCO)
+								 		{
+								 			//pour augmenter le score
+							 				pthread_mutex_lock(&mutexScore);
+
+							 				MAJScore = true;
+							 				score += 1;
+
+							 				pthread_mutex_unlock(&mutexScore);
+
+							 				//signaler que le score vient de changer
+							 				pthread_cond_signal(&condScore);
+								 		}
+
 								 		//afficherGrilleJeu();
 									}
 						 		}
@@ -612,6 +632,20 @@ void* FctThreadDKJr(void *)
 									//lui afficher sur le sol
 							 		setGrilleJeu(1, positionDKJr, DKJR);
 							 		afficherDKJr(7, (positionDKJr * 2) + 7, ((positionDKJr - 1) % 4) + 1);
+
+							 		if(grilleJeu[1][positionDKJr+1].type == CROCO)
+							 		{
+							 			//pour augmenter le score
+						 				pthread_mutex_lock(&mutexScore);
+
+						 				MAJScore = true;
+						 				score += 1;
+
+						 				pthread_mutex_unlock(&mutexScore);
+
+						 				//signaler que le score vient de changer
+						 				pthread_cond_signal(&condScore);
+							 		}
 								}
 							}
 							else
@@ -735,7 +769,7 @@ void* FctThreadDKJr(void *)
 									if(grilleJeu[3][2].type == CROCO) pthread_kill(grilleJeu[3][2].tid, SIGUSR2);
 									if(grilleJeu[3][3].type == CROCO) pthread_kill(grilleJeu[3][3].tid, SIGUSR2);
 
-									printf("hello\n");
+									//printf("hello\n");
 
 					 				//lui afficher sur le sol
 							 		setGrilleJeu(3, 1, DKJR); 
@@ -743,7 +777,7 @@ void* FctThreadDKJr(void *)
 									etatDKJr = LIBRE_BAS; 
 									positionDKJr = 1;
 
-									printf("hello2\n");
+									//printf("hello2\n");
 					 			}
 					 			else 
 					 			{
@@ -942,6 +976,33 @@ void* FctThreadScore(void *)
 
 			afficherScore(score);
 
+			if((score - VeriScore) >= 300)
+			{
+				VeriScore = score;
+				if(vie > 1) vie--;
+
+				int i = 1;
+
+				//effacer les tetes du dkjr
+				effacerCarres(7, 27, 1, 3);
+
+				if(delaiEnnemis < 3000)
+				{
+					pthread_mutex_lock(&mutexDelai);
+
+			 		delaiEnnemis = 3000;
+					alarm(15);
+
+			 		pthread_mutex_unlock(&mutexDelai);
+				}
+
+				while(i < vie)
+				{
+					afficherEchec(i);
+					i++;
+				}
+			}
+
 			MAJScore = false;
 		}
 	}
@@ -996,8 +1057,12 @@ void* FctThreadEnnemis(void *)
 			pthread_create(&threadCroco, NULL, (void *(*) (void *))FctThreadCroco, NULL);
 		}
 
+		pthread_mutex_lock(&mutexDelai);
+
 		timeRespawnSec = delaiEnnemis/1000;
 		timeRespawnNsec = (delaiEnnemis%1000)*1000000;
+
+		pthread_mutex_unlock(&mutexDelai);
 
 		requete = { timeRespawnSec, timeRespawnNsec };
 	}
@@ -1036,10 +1101,10 @@ void* FctThreadCorbeau(void *)
 
 	while(positionCourbeau < 7)
 	{
+		pthread_mutex_lock(&mutexGrilleJeu);
+
 		if(grilleJeu[2][positionCourbeau + 1].type == DKJR)
 		{
-			pthread_mutex_lock(&mutexGrilleJeu);
-
 			printf("MEGA L BY COURBEAU\n");
 
 			kill(getpid(), SIGINT); //envoyer le signal
@@ -1051,8 +1116,6 @@ void* FctThreadCorbeau(void *)
 		}
 		else
 		{
-			pthread_mutex_lock(&mutexGrilleJeu);
-
 			setGrilleJeu(2, positionCourbeau);
 	 		effacerCarres(9, (positionCourbeau * 2) + 8, 2, 1);
 
@@ -1114,10 +1177,10 @@ void* FctThreadCroco(void *)
 	{
 		if(croc.haut)
 		{
+			pthread_mutex_lock(&mutexGrilleJeu);
+
 			if(grilleJeu[1][croc.position+1].type == DKJR)
 			{
-				pthread_mutex_lock(&mutexGrilleJeu);
-
 				kill(getpid(), SIGHUP);
 
 				setGrilleJeu(1, croc.position);
@@ -1132,8 +1195,6 @@ void* FctThreadCroco(void *)
 			{
 				if(croc.position < 7)
 				{
-					pthread_mutex_lock(&mutexGrilleJeu);
-
 					setGrilleJeu(1, croc.position);
 					effacerCarres(8, (croc.position * 2) + 7, 1, 1);
 
@@ -1151,8 +1212,6 @@ void* FctThreadCroco(void *)
 				}
 				else
 				{
-					pthread_mutex_lock(&mutexGrilleJeu);
-
 					setGrilleJeu(1, croc.position);
 					effacerCarres(8, (croc.position * 2) + 7, 1, 1);
 
@@ -1172,10 +1231,10 @@ void* FctThreadCroco(void *)
 		{
 			if(croc.position > 1)
 			{
+				pthread_mutex_lock(&mutexGrilleJeu);
+
 				if(grilleJeu[3][croc.position-1].type == DKJR)
 				{
-					pthread_mutex_lock(&mutexGrilleJeu);
-
 					kill(getpid(), SIGCHLD);
 
 					if(croc.position == 8)
@@ -1199,8 +1258,6 @@ void* FctThreadCroco(void *)
 				{
 					if(croc.position == 8)
 					{
-						pthread_mutex_lock(&mutexGrilleJeu);
-
 						//printf("hola croco\n");
 
 						setGrilleJeu(2, croc.position);
@@ -1220,8 +1277,6 @@ void* FctThreadCroco(void *)
 					}
 					else
 					{
-						pthread_mutex_lock(&mutexGrilleJeu);
-
 						setGrilleJeu(3, croc.position);
 						effacerCarres(12, (croc.position * 2) + 8, 1, 1);
 
@@ -1274,11 +1329,15 @@ void HandlerSIGALRM(int)
 {
 	printf("SIGALRM RECU PAR %d.%u!\n", getpid(), pthread_self());
 
+	pthread_mutex_lock(&mutexDelai);
+
 	delaiEnnemis = delaiEnnemis - 250;
 
 	printf("Delai Ennemis = %d\n", delaiEnnemis);
 
 	if(delaiEnnemis > 2500) alarm(15);
+
+	pthread_mutex_unlock(&mutexDelai);
 }
 
 // -------------------------------------
@@ -1355,6 +1414,7 @@ void HandlerSIGHUP(int)
 	effacerCarres(7, (positionDKJr * 2) + 7, 2, 2);
 
 	pthread_mutex_unlock(&mutexGrilleJeu);
+	pthread_mutex_unlock(&mutexEvenement);
 
 	pthread_exit(NULL);
 }
@@ -1371,6 +1431,7 @@ void HandlerSIGCHLD(int)
 	effacerCarres(11, (positionDKJr * 2) + 7, 2, 2);
 
 	pthread_mutex_unlock(&mutexGrilleJeu);
+	pthread_mutex_unlock(&mutexEvenement);
 
 	pthread_exit(NULL);
 }
